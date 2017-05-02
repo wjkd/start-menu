@@ -13,3 +13,5 @@ Windows 10-like start menu for Linux.
 ## Installation
 
 Run `./install.sh` with root permissions.
+
+If you want to install for dockbarx, pass dockbarx as an argument.

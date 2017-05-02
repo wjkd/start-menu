@@ -2,17 +2,20 @@
 
 import gtk
 from dockbarx.applets import DockXApplet
-from subprocess import Popen
+from subprocess import Popen, call, check_output, CalledProcessError
 from threading import Thread
+import time
+
+def do(args):
+	try: call(args)
+	except CalledProcessError: pass
 
 class ProcessThread(Thread):
 	
-	def __init__(self, process, cb):
+	def __init__(self, process):
 		def target():
-			print 'start'
 			self.process = Popen(process)
 			self.process.wait()
-			cb()
 		Thread.__init__(self, target=target)
 	
 	def stop(self):
@@ -35,26 +38,41 @@ class StartMenuApplet(DockXApplet):
 		self.show()
 		
 		self.active = False
-		self.thread = None
-		self.process = None
+		self.started = False
+		
+	def start_process(self):
+		self.process = ProcessThread(['startmenu'])
+		self.process.start()
+		
+		self.thread = Thread(target=self.update)
+		self.thread.start()
+		self.started = True
 	
-	def process_cb(self):
-		self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-		self.active = False
-		self.thread = None
+	def update(self):
+		while True:
+			try:
+				output = check_output(['startmenuctl', 'status'])
+			except CalledProcessError:
+				output = '0'
+			if output == '1':
+				self.active = True
+				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
+			else:
+				self.active = False
+				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
+			time.sleep(0.5)
 	
 	def clicked(self, widget, event):
 		print 'clicked'
 		if self.active:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-			if self.thread:
-				self.thread.stop()
-				self.thread = None
+			do(['startmenuctl', 'hide'])
 			self.active = False
-		elif not self.thread:
+		else:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
-			self.thread = ProcessThread(['startmenu'], self.process_cb)
-			self.thread.start()
+			if not self.started:
+				self.start_process()
+			do(['startmenuctl', 'show'])
 			self.active = True
 	
 	def on_mouse_over(self, widget, event):

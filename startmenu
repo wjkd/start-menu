@@ -2,13 +2,17 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QDesktopWidget, QPushButton, QVBoxLayout, QScrollArea, QLineEdit, QLabel
 from PyQt5.QtGui import QIcon
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QThread
 from xdg.DesktopEntry import DesktopEntry
 import xdg.Menu
 import os
 from subprocess import Popen
+import socket
 
 MENU_DIR = '/etc/xdg/menus/lxde-applications.menu'
+HOST = '127.0.0.1'
+PORT = 8086
+BUFFER_SIZE = 1024
 
 ########################################################################
 class StartMenu(object):
@@ -39,15 +43,19 @@ class StartMenu(object):
 				))
 		self.applications.sort(key=lambda application: application.name)
 		self.categories.sort(key=lambda category: category.name)
+		
+		self.server = Server(self)
 	
 	def exit(self, state):
 		if state == Qt.ApplicationInactive:
-			exit()
+			#exit()
+			self.widget.hide()
 	
 	def run(self):
 		self.app = QApplication(sys.argv)
 		self.app.applicationStateChanged.connect(self.exit)
 		self.widget = StartMenuWidget(self.categories, self)
+		self.server.start()
 		sys.exit(self.app.exec_())
 		
 ########################################################################
@@ -77,15 +85,15 @@ class StartMenuWidget(QWidget):
 		self.backButton.hide()
 		self.mainLayout.addWidget(self.backButton)
 		
-		self.searchBar = SearchBar(self)
+		self.searchBar = SearchBar(startMenu)
 		self.mainLayout.addWidget(self.searchBar)
 		
 		self.startMenu = startMenu
 		
 		geometry = startMenu.app.desktop().screenGeometry()
 		width, height = geometry.width(), geometry.height()
-		self.move(0,height-505)
-		self.setFixedSize(400, 500)
+		self.move(0,height-515)
+		self.setFixedSize(400, 510)
 		self.setLayout(self.mainLayout)
 		self.setStyleSheet("""
 		QScrollArea {
@@ -146,21 +154,24 @@ class StartMenuWidget(QWidget):
 		categories = [ entry for entry in self.startMenu.categories if query in entry.name.lower() ]
 		self.deleteBoxes()
 		
-		runButton = QPushButton('Execute "%s"' % (query))
-		runButton.clicked.connect(lambda x: Popen(query.split(' ')) and exit())
-		self.boxLayout.addWidget(runButton)
-		
-		self.boxLayout.addWidget(QLabel('Applications'))
+		if applications:
+			self.boxLayout.addWidget(QLabel('Applications'))
 		for application in applications:
 			application.show()
 			self.boxLayout.addWidget(application.button)
 		
-		self.boxLayout.addWidget(QLabel('Categories'))
+		if categories:
+			self.boxLayout.addWidget(QLabel('Categories'))
 		for category in categories:
 			category.show()
 			self.boxLayout.addWidget(category.button)
 		
+		runButton = QPushButton('Execute "%s"' % (query))
+		runButton.clicked.connect(lambda x: Popen(query.split(' ')) and exit())
+		self.boxLayout.addWidget(runButton)
+		
 		self.boxLayout.addStretch()
+		self.backButton.hide()
 
 ########################################################################
 class BackButton(QPushButton):
@@ -202,9 +213,13 @@ class Application(object):
 		self.button = QPushButton(self.icon, self.name)
 		self.button.clicked.connect(self.onButtonClick)
 	
-	def onButtonClick(self, widget):
+	def run(self):
 		Popen([ self.runs ])
-		exit()
+		self.startMenu.widget.showCategories()
+		self.startMenu.widget.hide()
+	
+	def onButtonClick(self, widget):
+		self.run()
 
 ########################################################################
 class Category(object):
@@ -236,9 +251,50 @@ class SearchBar(QLineEdit):
 		self.startMenu = startMenu
 		self.setPlaceholderText('Search for programs or categories...')
 		self.textChanged.connect(self.onTextChanged)
+		self.returnPressed.connect(self.onEnter)
 	
 	def onTextChanged(self, query):
-		self.startMenu.showSearch(query)
+		self.startMenu.widget.showSearch(query)
+	
+	def onEnter(self):
+		query = self.text()
+		try:
+			application = next(filter(lambda application: query in application.name.lower(), self.startMenu.applications))
+			application.run()
+		except StopIteration:
+			Popen(query.split(' '))
+			self.startMenu.widget.hide()
+
+########################################################################
+class Server(QThread):
+	
+	def __init__(self, startMenu):
+		super().__init__()
+		self.startMenu = startMenu
+	
+	def run(self):
+		self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.socket.bind((HOST, PORT))
+		self.socket.listen(1)
+		
+		while True:
+			self.connection, self.address = self.socket.accept()
+			data = self.connection.recv(1024).decode()
+			if not data:
+				continue
+			print('received', data)
+			if data == 'show':
+				self.startMenu.widget.show()
+			elif data == 'hide':
+				self.startMenu.widget.hide()
+			elif data == 'status':
+				self.connection.send(bytes('1' if self.startMenu.widget.isVisible() else '0', 'utf-8'))
+				continue
+			elif data == 'exit':
+				self.socket.close()
+				exit()
+			self.connection.send(bytes(1))
+		
 
 if __name__ == '__main__':
 	StartMenu().run()
