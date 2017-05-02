@@ -1,0 +1,6 @@
+@dbx applet
+name=Start Menu
+exec=startmenu.py
+
+@description
+Windows 10-like start menu for Linux.
