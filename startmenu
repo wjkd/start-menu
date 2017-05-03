@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 import sys
-from PyQt5.QtWidgets import QApplication, QWidget, QDesktopWidget, QPushButton, QVBoxLayout, QScrollArea, QLineEdit, QLabel
+from PyQt5.QtWidgets import QApplication, QWidget, QDesktopWidget, QPushButton, QHBoxLayout, QVBoxLayout, QGridLayout, QScrollArea, QLineEdit, QLabel
 from PyQt5.QtGui import QIcon
 from PyQt5.QtCore import Qt, QThread
 from xdg.DesktopEntry import DesktopEntry
@@ -11,7 +11,7 @@ import socket
 
 MENU_DIR = '/etc/xdg/menus/lxde-applications.menu'
 HOST = '127.0.0.1'
-PORT = 8086
+PORT = 8080
 BUFFER_SIZE = 1024
 
 ########################################################################
@@ -48,7 +48,6 @@ class StartMenu(object):
 	
 	def exit(self, state):
 		if state == Qt.ApplicationInactive:
-			#exit()
 			self.widget.hide()
 	
 	def run(self):
@@ -64,53 +63,69 @@ class StartMenuWidget(QWidget):
 	def __init__(self, boxes, startMenu):
 		super().__init__()
 		
-		self.boxes = boxes
-		self.scrollArea = QScrollArea()
-		self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-		self.scrollArea.setWidgetResizable(True)
-		self.boxWidget = QWidget()
-		self.boxLayout = QVBoxLayout(self.scrollArea)
-		for box in self.boxes:
-			box.show()
-			self.boxLayout.addWidget(box.button)
-		self.boxLayout.addStretch()
-		self.boxWidget.setLayout(self.boxLayout)
-		self.scrollArea.setWidget(self.boxWidget)
-		self.scrollArea.show()
+		self.leftSide = LeftSide(startMenu)
+		self.leftSide.setContentsMargins(0,0,0,0)
+		self.leftSideWidget = QWidget()
+		self.leftSideWidget.setObjectName('leftSide')
+		self.leftSideWidget.setLayout(self.leftSide)
 		
-		self.mainLayout = QVBoxLayout()
-		self.mainLayout.addWidget(self.scrollArea)
+		self.rightSide = RightSide(boxes, startMenu)
+		self.rightSide.setContentsMargins(0,0,0,0)
+		self.rightSideWidget = QWidget()
+		self.rightSideWidget.setObjectName('rightSide')
+		self.rightSideWidget.setLayout(self.rightSide)
 		
-		self.backButton = BackButton()
-		self.backButton.hide()
-		self.mainLayout.addWidget(self.backButton)
-		
-		self.searchBar = SearchBar(startMenu)
-		self.mainLayout.addWidget(self.searchBar)
-		
+		self.mainLayout = QGridLayout()
+		self.mainLayout.setContentsMargins(0,0,0,0)
+		self.mainLayout.addWidget(self.leftSideWidget, 0, 0)
+		self.mainLayout.addWidget(self.rightSideWidget, 0, 1)
+		self.mainLayout.setSpacing(0)
 		self.startMenu = startMenu
 		
 		geometry = startMenu.app.desktop().screenGeometry()
 		width, height = geometry.width(), geometry.height()
 		self.move(0,height-515)
-		self.setFixedSize(400, 510)
+		self.setFixedSize(500, 510)
 		self.setLayout(self.mainLayout)
 		self.setStyleSheet("""
+		#leftSide {
+			background-color: #121921;
+			width: 36px;
+		}
+		#leftSide QPushButton {
+			margin: 0 2px;
+			width: 32px;
+			height: 32px;
+			icon-size: 32px 32px;
+			background-color: #121921;
+		}
+		
 		QScrollArea {
 			border: 0 none;
 		}
-		QWidget {
-			background-color:#141a21;
+		#rightSide, #rightSide QWidget {
+			background-color: #121f28;
 			color: #fff;
 		}
+		#rightSide QBoxLayout {
+			margin: 10px;
+		}
+		#rightSide QLineEdit {
+			background-color: #fff;
+			border: 1px solid #73c6ff;
+			color : #000;
+			margin: 10px;
+		}
+		
 		QPushButton {
 			padding: 5px;
 			text-align: left;
 			border: 1px solid transparent;
 		}
-		QPushButton:hover {
+		#rightSide QPushButton:hover {
 			border:1px solid #fff;
 		}
+		
 		QLineEdit {
 			padding: 5px 10px;
 			background-color: #fff;
@@ -121,8 +136,8 @@ class StartMenuWidget(QWidget):
 			padding-bottom: 3px;
 		}
 		""")
-		self.setWindowFlags(Qt.FramelessWindowHint)
-		self.show()
+		self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
+		self.hide()
 	
 	# boxes
 	def showBoxes(self, boxes):
@@ -142,6 +157,7 @@ class StartMenuWidget(QWidget):
 	# page
 	def showCategories(self):
 		self.showBoxes(self.startMenu.categories)
+		self.startMenu.widget.backButton.hide()
 	
 	def showApplications(self):
 		self.showBoxes(self.startMenu.entries)
@@ -168,6 +184,104 @@ class StartMenuWidget(QWidget):
 		
 		runButton = QPushButton('Execute "%s"' % (query))
 		runButton.clicked.connect(lambda x: Popen(query.split(' ')) and exit())
+		self.boxLayout.addWidget(runButton)
+		
+		self.boxLayout.addStretch()
+		self.backButton.hide()
+
+########################################################################
+class LeftSide(QVBoxLayout):
+	
+	def __init__(self, startMenu):
+		super().__init__()
+		
+		self.addStretch()
+		
+		logOutIcon = QIcon.fromTheme('system-log-out')
+		self.logOut = QPushButton(logOutIcon, '')
+		self.addWidget(self.logOut)
+		
+		shutdownIcon = QIcon.fromTheme('system-shutdown')
+		self.shutdown = QPushButton(shutdownIcon, '')
+		self.addWidget(self.shutdown)
+		
+		self.startMenu = startMenu
+		
+########################################################################
+class RightSide(QVBoxLayout):
+	
+	def __init__(self, boxes, startMenu):
+		super().__init__()
+		
+		self.boxes = boxes
+		self.scrollArea = QScrollArea()
+		self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+		self.scrollArea.setWidgetResizable(True)
+		self.boxWidget = QWidget()
+		self.boxLayout = QVBoxLayout(self.scrollArea)
+		for box in self.boxes:
+			box.show()
+			self.boxLayout.addWidget(box.button)
+		self.boxLayout.addStretch()
+		self.boxWidget.setLayout(self.boxLayout)
+		self.scrollArea.setWidget(self.boxWidget)
+		self.scrollArea.show()
+		self.addWidget(self.scrollArea)
+		
+		self.backButton = BackButton()
+		self.backButton.hide()
+		self.addWidget(self.backButton)
+		
+		self.searchBar = SearchBar(startMenu)
+		self.addWidget(self.searchBar)
+		
+		self.startMenu = startMenu
+	
+	# box
+	def showBoxes(self, boxes):
+		self.boxes = boxes
+		self.deleteBoxes()
+		for box in boxes:
+			box.show()
+			self.boxLayout.addWidget(box.button)
+		self.boxLayout.addStretch()
+	
+	def deleteBoxes(self):
+		while self.boxLayout.count():
+			child = self.boxLayout.takeAt(0)
+			if child.widget():
+				child.widget().deleteLater()
+	
+	# page
+	def showCategories(self):
+		self.showBoxes(self.startMenu.categories)
+		self.backButton.hide()
+	
+	def showApplications(self):
+		self.showBoxes(self.startMenu.entries)
+	
+	def showSearch(self, query):
+		if not query:
+			self.showCategories()
+			return
+		applications = [ entry for entry in self.startMenu.applications if query in entry.name.lower() ]
+		categories = [ entry for entry in self.startMenu.categories if query in entry.name.lower() ]
+		self.deleteBoxes()
+		
+		if applications:
+			self.boxLayout.addWidget(QLabel('Applications'))
+		for application in applications:
+			application.show()
+			self.boxLayout.addWidget(application.button)
+		
+		if categories:
+			self.boxLayout.addWidget(QLabel('Categories'))
+		for category in categories:
+			category.show()
+			self.boxLayout.addWidget(category.button)
+		
+		runButton = QPushButton('Execute "%s"' % (query))
+		runButton.clicked.connect(lambda x: Popen(query.split(' ')) and self.startMenu.widget.hide())
 		self.boxLayout.addWidget(runButton)
 		
 		self.boxLayout.addStretch()
@@ -215,7 +329,8 @@ class Application(object):
 	
 	def run(self):
 		Popen([ self.runs ])
-		self.startMenu.widget.showCategories()
+		#self.startMenu.widget.showCategories()
+		self.startMenu.widget.rightSide.showCategories()
 		self.startMenu.widget.hide()
 	
 	def onButtonClick(self, widget):
@@ -236,12 +351,11 @@ class Category(object):
 		self.button.clicked.connect(self.onButtonClick)
 	
 	def onButtonClick(self, widget):
-		self.startMenu.widget.showBoxes(self.entries)
-		self.startMenu.widget.backButton.set(self.onBackButtonClicked)
+		self.startMenu.widget.rightSide.showBoxes(self.entries)
+		self.startMenu.widget.rightSide.backButton.set(self.onBackButtonClicked)
 	
 	def onBackButtonClicked(self, widget):
-		self.startMenu.widget.showCategories()
-		self.startMenu.widget.backButton.hide()
+		self.startMenu.widget.rightSide.showCategories()
 
 ########################################################################
 class SearchBar(QLineEdit):
@@ -254,7 +368,7 @@ class SearchBar(QLineEdit):
 		self.returnPressed.connect(self.onEnter)
 	
 	def onTextChanged(self, query):
-		self.startMenu.widget.showSearch(query)
+		self.startMenu.widget.rightSide.showSearch(query)
 	
 	def onEnter(self):
 		query = self.text()

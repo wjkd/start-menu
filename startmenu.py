@@ -2,13 +2,14 @@
 
 import gtk
 from dockbarx.applets import DockXApplet
-from subprocess import Popen, call, check_output, CalledProcessError
+from subprocess import Popen
 from threading import Thread
 import time
+import socket
 
-def do(args):
-	try: call(args)
-	except CalledProcessError: pass
+HOST = '127.0.0.1'
+PORT = 8080
+BUFFER_SIZE = 1024
 
 class ProcessThread(Thread):
 	
@@ -32,55 +33,65 @@ class StartMenuApplet(DockXApplet):
 		self.add(self.image)
 		self.image.show()
 		
-		self.connect('enter-notify-event', self.on_mouse_over)
-		self.connect('leave-notify-event', self.on_mouse_leave)
-		self.connect('clicked', self.clicked)
-		self.show()
-		
 		self.active = False
-		self.started = False
+		self.hover = False
 		
-	def start_process(self):
 		self.process = ProcessThread(['startmenu'])
 		self.process.start()
 		
 		self.thread = Thread(target=self.update)
 		self.thread.start()
-		self.started = True
+		
+		self.connect('enter-notify-event', self.on_mouse_over)
+		self.connect('leave-notify-event', self.on_mouse_leave)
+		self.connect('clicked', self.clicked)
+		self.show()
 	
+	# Socket
+	def send(self, argument):
+		s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		try:
+			s.connect((HOST, PORT))
+		except socket.error, OSError:
+			return
+		s.send(argument.decode('utf-8'))
+		data = s.recv(BUFFER_SIZE)
+		s.close()
+		return data
+	
+	# Update thread
 	def update(self):
 		while True:
-			try:
-				output = check_output(['startmenuctl', 'status'])
-			except CalledProcessError:
-				output = '0'
+			output = self.send('status')
 			if output == '1':
 				self.active = True
 				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
 			else:
+				if self.hover:
+					self.hover = False
 				self.active = False
 				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-			time.sleep(0.5)
+			time.sleep(0.1)
 	
+	# Event handlers
 	def clicked(self, widget, event):
 		print 'clicked'
 		if self.active:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-			do(['startmenuctl', 'hide'])
+			self.send('hide')
 			self.active = False
 		else:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
-			if not self.started:
-				self.start_process()
-			do(['startmenuctl', 'show'])
+			self.send('show')
 			self.active = True
 	
 	def on_mouse_over(self, widget, event):
 		self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
+		self.hover = True
 	
 	def on_mouse_leave(self, widget, event):
-		if not self.active:
-			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
+		self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
+		self.hover = False
 
 def get_dbx_applet(dbx_dict):
 	applet = StartMenuApplet(dbx_dict)
