@@ -62,21 +62,21 @@ class StartMenuApplet(DockXApplet):
 	# Update thread
 	def update(self):
 		while True:
+			if self.hover:
+				continue
 			output = self.send('status')
 			if output == '1':
 				self.active = True
 				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
 			else:
-				if self.hover:
-					self.hover = False
 				self.active = False
 				self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-			time.sleep(0.1)
+			time.sleep(0.05)
 	
 	# Event handlers
 	def clicked(self, widget, event):
 		print 'clicked'
-		if self.active:
+		if self.active or not self.hover:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
 			self.send('hide')
 			self.active = False
@@ -84,15 +84,16 @@ class StartMenuApplet(DockXApplet):
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
 			self.send('show')
 			self.active = True
+			self.hover = False
 	
 	def on_mouse_over(self, widget, event):
 		self.image.set_from_file('/usr/share/dockbarx/applets/startmenu-active.png')
 		self.hover = True
 	
 	def on_mouse_leave(self, widget, event):
-		if self.hover:
+		if not self.active:
 			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-			self.hover = False
+		self.hover = False
 
 def get_dbx_applet(dbx_dict):
 	applet = StartMenuApplet(dbx_dict)
