@@ -10,9 +10,17 @@ from subprocess import Popen
 import socket
 
 MENU_DIR = '/etc/xdg/menus/lxde-applications.menu'
+
 HOST = '127.0.0.1'
 PORT = 8080
 BUFFER_SIZE = 1024
+
+LOGOUT_COMMANDS = {
+	'GNOME': 'gnome-session-quit',
+	'LXDE': 'lxde-logout',
+	'XFCE': 'xfce4-session-logout'
+}
+SHUTDOWN_COMMAND = 'shutdown'
 
 ########################################################################
 class StartMenu(object):
@@ -30,6 +38,7 @@ class StartMenu(object):
 						menuEntry.DesktopEntry.getCategories(),
 						menuEntry.DesktopEntry.getKeywords(),
 						menuEntry.DesktopEntry.getExec(),
+						menuEntry.DesktopEntry.getTerminal(),
 						menuEntry.DesktopEntry.getIcon(),
 						self
 					) for menuEntry in entry.MenuEntries
@@ -199,6 +208,7 @@ class LeftSide(QVBoxLayout):
 		
 		logOutIcon = QIcon.fromTheme('system-log-out')
 		self.logOut = QPushButton(logOutIcon, '')
+		self.logOut.clicked.connect(self.onLogoutClick)
 		self.addWidget(self.logOut)
 		
 		shutdownIcon = QIcon.fromTheme('system-shutdown')
@@ -206,6 +216,15 @@ class LeftSide(QVBoxLayout):
 		self.addWidget(self.shutdown)
 		
 		self.startMenu = startMenu
+	
+	def onLogoutClick(self, widget):
+		desktop_environment = os.environ['XDG_CURRENT_DESKTOP']
+		if desktop_environment in LOGOUT_COMMANDS:
+			logout_command = LOGOUT_COMMANDS[desktop_environment]
+			Popen([ logout_command ])
+	
+	def onShutdownClick(self):
+		Popen([ SHUTDOWN_COMMAND ])
 		
 ########################################################################
 class RightSide(QVBoxLayout):
@@ -264,7 +283,7 @@ class RightSide(QVBoxLayout):
 		if not query:
 			self.showCategories()
 			return
-		applications = [ entry for entry in self.startMenu.applications if query in entry.name.lower() ]
+		applications = [ entry for entry in self.startMenu.applications if entry.searchMatches(query) ]
 		categories = [ entry for entry in self.startMenu.categories if query in entry.name.lower() ]
 		self.deleteBoxes()
 		
@@ -310,26 +329,40 @@ class BackButton(QPushButton):
 ########################################################################
 class Application(object):
 	
-	def __init__(self, name, comment, categories, keywords, execute, icon, startMenu):
+	def __init__(self, name, comment, categories, keywords, execute, terminal, icon, startMenu):
 		self.name = name
 		self.comment = comment
 		self.categories = categories
 		self.keywords = keywords
 		self.execute = execute
+		self.terminal = terminal
 		self.iconName = icon
 		
 		arguments = self.execute.split(' ')
 		self.runs = arguments[0]
 		self.startMenu = startMenu
 		
+	def searchMatches(self, query):
+		if query in self.name.lower() or self.runs in query:
+			return True
+		
+		words = query.split(' ')
+		for word in query:
+			if query in self.keywords or query in self.categories:
+				return True
+		
+		return False
+	
 	def show(self):
 		self.icon = QIcon.fromTheme(self.iconName)
 		self.button = QPushButton(self.icon, self.name)
 		self.button.clicked.connect(self.onButtonClick)
 	
 	def run(self):
-		Popen([ self.runs ])
-		#self.startMenu.widget.showCategories()
+		if self.terminal:
+			Popen([ 'x-terminal-emulator', '-e', self.runs ])
+		else:
+			Popen([ self.runs ])
 		self.startMenu.widget.rightSide.showCategories()
 		self.startMenu.widget.hide()
 	
@@ -373,7 +406,7 @@ class SearchBar(QLineEdit):
 	def onEnter(self):
 		query = self.text()
 		try:
-			application = next(filter(lambda application: query in application.name.lower(), self.startMenu.applications))
+			application = next(filter(lambda application: application.searchMatches(query), self.startMenu.applications))
 			application.run()
 		except StopIteration:
 			Popen(query.split(' '))
@@ -401,6 +434,8 @@ class Server(QThread):
 				self.startMenu.widget.show()
 			elif data == 'hide':
 				self.startMenu.widget.hide()
+			elif data == 'toggle':
+				self.startMenu.widget.setVisible(not self.startMenu.widget.isVisible())
 			elif data == 'status':
 				self.connection.send(bytes('1' if self.startMenu.widget.isVisible() else '0', 'utf-8'))
 				continue

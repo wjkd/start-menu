@@ -90,8 +90,9 @@ class StartMenuApplet(DockXApplet):
 		self.hover = True
 	
 	def on_mouse_leave(self, widget, event):
-		self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
-		self.hover = False
+		if self.hover:
+			self.image.set_from_file('/usr/share/dockbarx/applets/startmenu.png')
+			self.hover = False
 
 def get_dbx_applet(dbx_dict):
 	applet = StartMenuApplet(dbx_dict)

@@ -7,7 +7,7 @@ Windows 10-like start menu for Linux.
 ## Requirements
 
 * PyQt5
-* python-xdg
+* pyxdg
 * Dockbarx (if you want a start button for the dock)
 
 ## Installation
