@@ -9,10 +9,10 @@ import os
 from subprocess import Popen
 import socket
 
-MENU_DIR = '/etc/xdg/menus/lxde-applications.menu'
+MENU_DIR = '/etc/xdg/menus/xfce-applications.menu'
 
 HOST = '127.0.0.1'
-PORT = 8080
+PORT = 8086
 BUFFER_SIZE = 1024
 
 LOGOUT_COMMANDS = {
@@ -20,7 +20,7 @@ LOGOUT_COMMANDS = {
 	'LXDE': 'lxde-logout',
 	'XFCE': 'xfce4-session-logout'
 }
-SHUTDOWN_COMMAND = 'shutdown'
+SHUTDOWN_COMMAND = ['shutdown', '-h', 'now']
 
 ########################################################################
 class StartMenu(object):
@@ -72,6 +72,11 @@ class StartMenuWidget(QWidget):
 	def __init__(self, boxes, startMenu):
 		super().__init__()
 		
+		self._active = False
+		
+		QIcon.setThemeName('Arc') # hack
+		print(QIcon.themeName(), QIcon.themeSearchPaths())
+		
 		self.leftSide = LeftSide(startMenu)
 		self.leftSide.setContentsMargins(0,0,0,0)
 		self.leftSideWidget = QWidget()
@@ -91,9 +96,9 @@ class StartMenuWidget(QWidget):
 		self.mainLayout.setSpacing(0)
 		self.startMenu = startMenu
 		
-		geometry = startMenu.app.desktop().screenGeometry()
-		width, height = geometry.width(), geometry.height()
-		self.move(0,height-515)
+		#geometry = startMenu.app.desktop().screenGeometry()
+		#width, height = geometry.width(), geometry.height()
+		self.move(45,0)
 		self.setFixedSize(500, 510)
 		self.setLayout(self.mainLayout)
 		self.setStyleSheet("""
@@ -145,7 +150,7 @@ class StartMenuWidget(QWidget):
 			padding-bottom: 3px;
 		}
 		""")
-		self.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
+		self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
 		self.hide()
 	
 	# boxes
@@ -224,7 +229,7 @@ class LeftSide(QVBoxLayout):
 			Popen([ logout_command ])
 	
 	def onShutdownClick(self):
-		Popen([ SHUTDOWN_COMMAND ])
+		Popen(SHUTDOWN_COMMAND)
 		
 ########################################################################
 class RightSide(QVBoxLayout):
@@ -429,13 +434,19 @@ class Server(QThread):
 			data = self.connection.recv(1024).decode()
 			if not data:
 				continue
-			print('received', data)
-			if data == 'show':
+			print('received', data, self.startMenu.widget._active)
+			if data == 'show' or (data == 'toggle' and not self.startMenu.widget._active):
 				self.startMenu.widget.show()
-			elif data == 'hide':
+				self.startMenu.widget.activateWindow()
+				self.startMenu.widget._active = True
+			elif data == 'hide' or (data == 'toggle' and self.startMenu.widget._active):
 				self.startMenu.widget.hide()
-			elif data == 'toggle':
-				self.startMenu.widget.setVisible(not self.startMenu.widget.isVisible())
+				self.startMenu.widget._active = False
+			#elif data == 'toggle':
+				#print(self.startMenu.widget.isVisible())
+				#self.startMenu.widget.setVisible(not self.startMenu.widget.isVisible())
+				#if active: self.startMenu.widget.hide()
+				#else: self.startMenu.widget.show()
 			elif data == 'status':
 				self.connection.send(bytes('1' if self.startMenu.widget.isVisible() else '0', 'utf-8'))
 				continue
