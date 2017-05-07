@@ -74,7 +74,7 @@ class StartMenuWidget(QWidget):
 		
 		self._active = False
 		
-		QIcon.setThemeName('Arc') # hack
+		QIcon.setThemeName('Arc') # edit this out if your desktop environment is lxde, gnome or kde
 		print(QIcon.themeName(), QIcon.themeSearchPaths())
 		
 		self.leftSide = LeftSide(startMenu)
